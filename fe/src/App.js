@@ -46,10 +46,30 @@ function App() {
     }
   };
 
+  const onDropMain = (acceptedFiles) => {
+    dispatch({ type: 'SET_MAIN_VIDEO_FILE', payload: acceptedFiles[0] });
+  };
+
+  const onDropOverlay = (acceptedFiles) => {
+    dispatch({ type: 'SET_OVERLAY_VIDEO_FILE', payload: acceptedFiles[0] });
+  };
+
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,
     accept: 'video/*',
     multiple: true
+  });
+
+  const { getRootProps: getRootPropsMain, getInputProps: getInputPropsMain } = useDropzone({
+    onDrop: onDropMain,
+    accept: 'video/*',
+    multiple: false
+  });
+
+  const { getRootProps: getRootPropsOverlay, getInputProps: getInputPropsOverlay } = useDropzone({
+    onDrop: onDropOverlay,
+    accept: 'video/*',
+    multiple: false
   });
 
   const evaluateFile = async (file) => {
@@ -126,22 +146,19 @@ function App() {
   };
 
   const handleOverlaySubmit = async () => {
-    const formData = new FormData();
-    formData.append('main_video', mainVideoFile);
-    formData.append('overlay_video', overlayVideoFile);
-    formData.append('position', overlayPosition);
-    formData.append('size', overlaySize);
-    formData.append('mute_overlay_audio', muteOverlayAudio);
-    formData.append('scale_overlay_time', scaleOverlayTime);
+    const data = {
+      main_video_filename: mainVideoFile.name,
+      overlay_video_filename: overlayVideoFile.name,
+      position: overlayPosition,
+      size: overlaySize,
+      mute_overlay_audio: muteOverlayAudio,
+      scale_overlay_time: scaleOverlayTime
+    };
 
-    console.log('Sending overlay data to backend:', formData);
+    console.log('Sending overlay data to backend:', data);
 
     try {
-      const response = await axios.post('http://localhost:5000/overlay', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
+      const response = await axios.post('http://localhost:5000/overlay', data);
       console.log('Response from backend:', response.data);
       alert(`File created: ${response.data.result}`);
       dispatch({ type: 'SET_DOWNLOAD_LINK', payload: `http://localhost:5000/download/${response.data.result}` });
@@ -380,13 +397,15 @@ function App() {
                   <Typography variant="body2">Estimated Time Left: {formatTime(estimatedTimeLeft)}</Typography>
                 </Box>
               )}
-              <Box {...getRootProps()} style={{ border: '2px dashed gray', padding: '20px', width: '100%', textAlign: 'center', marginBottom: '20px' }}>
-                <input {...getInputProps()} onChange={(e) => dispatch({ type: 'SET_MAIN_VIDEO_FILE', payload: e.target.files[0] })} />
+              <Box {...getRootPropsMain()} style={{ border: '2px dashed gray', padding: '20px', width: '100%', textAlign: 'center', marginBottom: '20px' }}>
+                <input {...getInputPropsMain()} />
                 <p>Drag 'n' drop the main video file here, or click to select the file</p>
+                {mainVideoFile && <Typography variant="body2">Selected: {mainVideoFile.name}</Typography>}
               </Box>
-              <Box {...getRootProps()} style={{ border: '2px dashed gray', padding: '20px', width: '100%', textAlign: 'center', marginBottom: '20px' }}>
-                <input {...getInputProps()} onChange={(e) => dispatch({ type: 'SET_OVERLAY_VIDEO_FILE', payload: e.target.files[0] })} />
+              <Box {...getRootPropsOverlay()} style={{ border: '2px dashed gray', padding: '20px', width: '100%', textAlign: 'center', marginBottom: '20px' }}>
+                <input {...getInputPropsOverlay()} />
                 <p>Drag 'n' drop the overlay video file here, or click to select the file</p>
+                {overlayVideoFile && <Typography variant="body2">Selected: {overlayVideoFile.name}</Typography>}
               </Box>
               <Typography variant="h6" gutterBottom>
                 Select Overlay Position

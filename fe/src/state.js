@@ -1,19 +1,14 @@
 import React, { createContext, useReducer } from 'react';
 
+// Initial state
 const initialState = {
   files: [],
   includeAudio: false,
   description: '',
-  videoParams: {
-    frameRate: '',
-    width: '',
-    height: '',
-    codec: 'libx264',
-    bitrate: '1000k',
-  },
+  videoParams: {},
   progress: 0,
   estimatedTimeLeft: 0,
-  theme: localStorage.getItem('theme') || 'light',
+  theme: 'light',
   selectedFile: null,
   previewUrl: '',
   downloadLink: '',
@@ -22,14 +17,13 @@ const initialState = {
   mainVideoFile: null,
   overlayVideoFile: null,
   overlayPosition: 'top-right',
-  overlaySize: 30, // percentage size of the main video
+  overlaySize: 25,
   muteOverlayAudio: false,
-  scaleOverlayTime: false,
+  scaleOverlayTime: false
 };
 
-const StateContext = createContext(initialState);
-
-const stateReducer = (state, action) => {
+// Reducer function
+const reducer = (state, action) => {
   switch (action.type) {
     case 'SET_FILES':
       return { ...state, files: action.payload };
@@ -38,7 +32,7 @@ const stateReducer = (state, action) => {
     case 'SET_DESCRIPTION':
       return { ...state, description: action.payload };
     case 'SET_VIDEO_PARAMS':
-      return { ...state, videoParams: { ...state.videoParams, ...action.payload } };
+      return { ...state, videoParams: action.payload };
     case 'SET_PROGRESS':
       return { ...state, progress: action.payload };
     case 'SET_ESTIMATED_TIME_LEFT':
@@ -72,8 +66,12 @@ const stateReducer = (state, action) => {
   }
 };
 
+// Create context
+const StateContext = createContext();
+
+// Context provider
 const StateProvider = ({ children }) => {
-  const [state, dispatch] = useReducer(stateReducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState);
 
   return (
     <StateContext.Provider value={{ state, dispatch }}>
@@ -82,4 +80,4 @@ const StateProvider = ({ children }) => {
   );
 };
 
-export { StateContext, StateProvider };
+export { StateContext, StateProvider, initialState, reducer };

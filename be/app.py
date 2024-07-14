@@ -137,20 +137,27 @@ def combine():
 
 @app.route('/overlay', methods=['POST'])
 def overlay():
-    main_video = request.files['main_video']
-    overlay_video = request.files['overlay_video']
-    position = request.form['position']
-    size = int(request.form['size'])
-    mute_overlay_audio = request.form.get('mute_overlay_audio') == 'true'
-    scale_overlay_time = request.form.get('scale_overlay_time') == 'true'
+    data = request.json
+    main_video_filename = data.get('main_video_filename')
+    overlay_video_filename = data.get('overlay_video_filename')
+    position = data.get('position')
+    size = int(data.get('size'))
+    mute_overlay_audio = data.get('mute_overlay_audio', False)
+    scale_overlay_time = data.get('scale_overlay_time', False)
 
-    output_file = '/videos/processing/overlay_output.mp4'
+    folder_path = '/videos/processing'
 
-    main_video.save('/videos/processing/main_video.mp4')
-    overlay_video.save('/videos/processing/overlay_video.mp4')
+    main_video_path = os.path.join(folder_path, main_video_filename)
+    overlay_video_path = os.path.join(folder_path, overlay_video_filename)
+    output_file = os.path.join(folder_path, 'overlay_output.mp4')
+
+    if not os.path.exists(main_video_path):
+        return jsonify({"error": f"Main video file does not exist: {main_video_path}"}), 400
+    if not os.path.exists(overlay_video_path):
+        return jsonify({"error": f"Overlay video file does not exist: {overlay_video_path}"}), 400
 
     # Get video dimensions for scaling the overlay
-    main_video_info = subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', '/videos/processing/main_video.mp4'])
+    main_video_info = subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', main_video_path])
     main_width, main_height = map(int, main_video_info.decode().strip().split('x'))
 
     overlay_width = int(main_width * (size / 100))
@@ -170,11 +177,21 @@ def overlay():
     }
     overlay_position = position_map[position]
 
+    # Get the duration of the main video and overlay video
+    result_main = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', main_video_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    result_overlay = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', overlay_video_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    
+    main_video_duration = float(result_main.stdout.strip())
+    overlay_video_duration = float(result_overlay.stdout.strip())
+
+    # Determine the duration to use for the ffmpeg command
+    duration_to_use = main_video_duration if scale_overlay_time else min(main_video_duration, overlay_video_duration)
+
     # Construct the ffmpeg command
-    command = ['ffmpeg', '-i', '/videos/processing/main_video.mp4', '-i', '/videos/processing/overlay_video.mp4', '-filter_complex', f'[1:v]scale={overlay_width}:{overlay_height}[ovrl];[0:v][ovrl]overlay={overlay_position}', '-codec:a', 'copy' if not mute_overlay_audio else '-an']
+    command = ['ffmpeg', '-i', main_video_path, '-i', overlay_video_path, '-filter_complex', f'[1:v]scale={overlay_width}:{overlay_height}[ovrl];[0:v][ovrl]overlay={overlay_position}', '-codec:a', 'copy' if not mute_overlay_audio else '-an']
 
     if scale_overlay_time:
-        command += ['-t', 'duration']
+        command += ['-t', str(duration_to_use)]
 
     command.append(output_file)
 
@@ -182,11 +199,7 @@ def overlay():
         # Run the ffmpeg command and capture the output in real-time
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
-        total_duration = 0
-        for video in ['/videos/processing/main_video.mp4', '/videos/processing/overlay_video.mp4']:
-            result = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', video], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            total_duration += float(result.stdout.strip())
-        
+        total_duration = main_video_duration
         processed_duration = 0
         for line in process.stderr:
             if "time=" in line:
@@ -203,7 +216,7 @@ def overlay():
             raise subprocess.CalledProcessError(rc, command)
 
     except subprocess.CalledProcessError as e:
-        error_message = e.stderr.decode('utf-8')
+        error_message = e.stderr.read()
         print(error_message)
         raise ValueError(error_message)
 
