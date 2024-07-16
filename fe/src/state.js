@@ -8,7 +8,7 @@ const initialState = {
   videoParams: {},
   progress: 0,
   estimatedTimeLeft: 0,
-  theme: 'light',
+  theme: localStorage.getItem('theme'),
   selectedFile: null,
   previewUrl: '',
   downloadLink: '',
@@ -38,6 +38,7 @@ const reducer = (state, action) => {
     case 'SET_ESTIMATED_TIME_LEFT':
       return { ...state, estimatedTimeLeft: action.payload };
     case 'SET_THEME':
+      localStorage.setItem('theme', newTheme);
       return { ...state, theme: action.payload };
     case 'SET_SELECTED_FILE':
       return { ...state, selectedFile: action.payload };
