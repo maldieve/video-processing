@@ -28,7 +28,7 @@ progress_thread = threading.Thread(target=update_progress)
 progress_thread.daemon = True
 progress_thread.start()
 
-def combine_files(file_paths, include_audio, output_file):
+def combine_files(file_paths, include_audio, output_file, video_params):
     if not file_paths:
         raise ValueError("No files to process.")
 
@@ -38,13 +38,18 @@ def combine_files(file_paths, include_audio, output_file):
             f.write(f"file '{file_path}'\n")
 
     # Construct the ffmpeg command
-    command = ['ffmpeg', '-f', 'concat', '-safe', '0', '-i', 'file_list.txt', '-c:v', 'libx264', '-crf', '18', '-preset', 'veryfast']
+    command = ['ffmpeg', '-f', 'concat', '-safe', '0', '-i', 'file_list.txt', '-c:v', video_params['codec'], '-crf', '18', '-preset', 'veryfast', '-b:v', video_params['bitrate']]
     
     if include_audio:
         command += ['-c:a', 'aac', '-b:a', '192k']
     else:
         command += ['-an']
-    
+
+    if video_params.get('frameRate'):
+        command += ['-r', video_params['frameRate']]
+    if video_params.get('width') and video_params.get('height'):
+        command += ['-vf', f"scale={video_params['width']}:{video_params['height']}"]
+        
     command.append(output_file)
 
     try:
@@ -99,6 +104,7 @@ def combine():
     file_names = data.get('file_names', [])
     include_audio = data.get('include_audio', False)
     description = data.get('description', '').strip()
+    video_params = data.get('video_params', {})
     
     if not description:
         return jsonify({"error": "Description is required"}), 400
@@ -125,7 +131,7 @@ def combine():
     output_file = os.path.join(folder_path, f"{description}.mp4")
     
     try:
-        result_file = combine_files(sorted_file_paths, include_audio, output_file)
+        result_file = combine_files(sorted_file_paths, include_audio, output_file, video_params)
     except ValueError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:
@@ -188,7 +194,10 @@ def overlay():
     duration_to_use = main_video_duration if scale_overlay_time else min(main_video_duration, overlay_video_duration)
 
     # Construct the ffmpeg command
-    command = ['ffmpeg', '-i', main_video_path, '-i', overlay_video_path, '-filter_complex', f'[1:v]scale={overlay_width}:{overlay_height}[ovrl];[0:v][ovrl]overlay={overlay_position}', '-codec:a', 'copy' if not mute_overlay_audio else '-an']
+    command = ['ffmpeg', '-i', main_video_path, '-i', overlay_video_path, '-filter_complex', f'[1:v]scale={overlay_width}:{overlay_height}[ovrl];[0:v][ovrl]overlay={overlay_position}', '-codec:a', 'copy']
+
+    if mute_overlay_audio:
+        command += ['-an']
 
     if scale_overlay_time:
         command += ['-t', str(duration_to_use)]
@@ -216,9 +225,9 @@ def overlay():
             raise subprocess.CalledProcessError(rc, command)
 
     except subprocess.CalledProcessError as e:
-        error_message = e.stderr.read()
+        error_message = e.stderr.decode('utf-8')
         print(error_message)
-        raise ValueError(error_message)
+        return jsonify({"error": error_message}), 500
 
     return jsonify({"result": output_file})
 
